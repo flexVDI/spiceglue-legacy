@@ -1,0 +1,88 @@
+# Detect OS and assign local paths accordingly
+# It is not a general solution, but works for my machines
+
+ifeq ($(OS),Windows_NT)
+	SPICE_GTK = ../../spice-gtk
+	#GSTREAMER_SDK_ROOT="c:/gstreamer-sdk/0.10/x86"
+    GSTREAMER_SDK_ROOT=../../gstreamer-1.0
+    CFLAGS += -D WIN32 -D _WIN32_WINNT=0x0501 -DPRINTING
+	SPICE_LIB = libspice-client-glib-2.0-8.dll #Note the hyphen before the 8
+	TARGET = spice-dotnet-glue.dll
+	CC = gcc
+	# Following variables are a conveniency to make "make install" place the dll in its intended place
+	# Base path of flexVDIClient project
+	CLIENT-MONO = ../../launcher-mono
+	# Directory used for libs
+	CLIENT_PLATFORM_LIBPATH = monoFlexVDIClient/lib
+	# Directory for the executable to speedup testing glue
+	CLIENT_PLATFORM_DEBUG_PATH = monoFlexVDIClient/bin/Windows/Debug
+	CLIENT_PLATFORM_RELEASE_PATH = monoFlexVDIClient/bin/Windows/Release
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        CFLAGS += -D LINUX
+		MORE_VARS = TO_COME
+    endif
+    ifeq ($(UNAME_S),Darwin)
+		SPICE_GTK = ../../spice-gtk
+		GSTREAMER_SDK_ROOT=/Library/Frameworks/Gstreamer.framework/Versions/1.0
+		CFLAGS += -D OSX -m32 -I$(GSTREAMER_SDK_ROOT)/include
+		SPICE_LIB = libspice-client-glib-2.0.8.dylib #Note the dot before the 8
+		TARGET = libspice-dotnet-glue.dylib
+		CC = clang
+		CLIENT-MONO = ../../launcher-mono
+		CLIENT_PLATFORM_LIBPATH = Platforms/flexVDI-Client-Mac/lib
+		CLIENT_PLATFORM_DEBUG_PATH = Platforms/flexVDI-Client-Mac/bin/Debug/flexVDI-Client-Mac.app/Contents/MonoBundle/
+		CLIENT_PLATFORM_RELEASE_PATH = Platforms/flexVDI-Client-Mac/bin/Release/flexVDI-Client-Mac.app/Contents/MonoBundle/
+    endif
+endif
+
+# DELETE
+# PKG_CONFIG_PATH:=$(GSTREAMER_SDK_ROOT)/lib/pkgconfig:$(HOME)/usr/lib/pkgconfig:$(PKG_CONFIG_PATH)
+PKG_CONFIG_PATH:=$(HOME)/usr/lib/pkgconfig:$(PKG_CONFIG_PATH)
+LIBRARIES = glib-2.0 gio-2.0 flexvdi-spice-client
+
+CFLAGS := -g  -Wall -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function\
+-I ../include \
+-I$(SPICE_GTK) \
+-I$(SPICE_GTK)/gtk \
+-I$(SPICE_GTK)/spice-common/ \
+-I$(SPICE_GTK)/spice-common/spice-protocol/ \
+$(CFLAGS)\
+-DG_LOG_DOMAIN=\"SpiceGlue\"		\
+$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(LIBRARIES))
+
+# ./lib/libspice-client-glib-2.0-8.dll
+#Why do I include the libraries?
+LDFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(LIBRARIES)) 
+	
+.PHONY: default all clean
+
+default: $(TARGET)
+all: default
+
+OBJECTS = $(patsubst %.c, %.o, $(wildcard *.c))
+HEADERS = $(wildcard *.h)
+
+%.o: %.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+.PRECIOUS: $(TARGET) $(OBJECTS)
+
+$(TARGET): $(OBJECTS)
+	$(CC) -shared $(CFLAGS) $(OBJECTS) $(SPICE_GTK)/gtk/.libs/$(SPICE_LIB) -o $@ $(LDFLAGS)
+
+clean:
+	-rm -f *.o
+	-rm -f $(TARGET)
+
+mac:
+	install_name_tool -id  "@loader_path/libspice-dotnet-glue.dylib" libspice-dotnet-glue.dylib
+	install_name_tool -change /usr/local/lib/libspice-client-glib-2.0.8.dylib @loader_path/libspice-client-glib-2.0.8.dylib libspice-dotnet-glue.dylib
+
+#TODO limpiar esto. Copia a todas las plataformas pero sólo generamos una
+install: all
+	cp $(TARGET) $(CLIENT-MONO)/monoFlexVDIClient/$(CLIENT_PLATFORM_LIBPATH)/
+	echo "Following directories are not really neccessary, but copying there can speed up build."
+	cp $(TARGET) $(CLIENT-MONO)/monoFlexVDIClient/$(CLIENT_PLATFORM_DEBUG_PATH)/
+	cp $(TARGET) $(CLIENT-MONO)/monoFlexVDIClient/$(CLIENT_PLATFORM_RELEASE_PATH)/
