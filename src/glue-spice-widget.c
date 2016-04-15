@@ -967,20 +967,22 @@ gboolean copy_display_to_glue(SpiceDisplayPrivate *d)
 
     if (d->data == NULL || d->width == 0 || d->height == 0) {
 	SPICE_DEBUG("local display is not available");
-	copy_scheduled = 0;
-	return FALSE;
+	return TRUE;
     }
 
     if (local_width != d->width || local_height != d->height) {
 	SPICE_DEBUG("local dimensions changed since scheduled\n");
-	copy_scheduled = 0;
-	return FALSE;
+	return TRUE;
     }
 
     if (glue_width < local_width || glue_height < local_height) {
 	SPICE_DEBUG("glue display dimensions are too small");
-	copy_scheduled = 0;
-	return FALSE;
+	return TRUE;
+    }
+
+    if (glue_display_buffer == NULL) {
+        SPICE_DEBUG("glue_display_buffer is not initialized yet");
+        return TRUE;
     }
 
     STATIC_MUTEX_LOCK(glue_display_lock);
