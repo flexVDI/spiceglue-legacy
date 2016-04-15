@@ -369,9 +369,12 @@ void connection_disconnect(spice_connection *conn)
     spice_session_disconnect(conn->session);
 }
 
+extern spice_connection *mainconn;
+
 static void connection_destroy(spice_connection *conn)
 {
     SPICE_DEBUG("glue-spicy: connection_destroy()");
+    mainconn = NULL;
     g_object_unref(conn->session);
     free(conn);
 
